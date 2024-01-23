@@ -32,34 +32,45 @@ const copyRecursive = async (src, dest) => {
   await copyNext(0);
 };
 
+// Динамически заменяем шаблоны на содержимое компонентов
+const replaceTemplates = async (content, componentsDir) => {
+  const templateRegex = /\{\{([^}]+)\}\}/g;
+
+  let match;
+  while ((match = templateRegex.exec(content)) !== null) {
+    const templateName = match[1].trim();
+    const componentPath = path.join(componentsDir, `${templateName}.html`);
+
+    try {
+      const componentContent = await fs.readFile(componentPath, 'utf8');
+      content = content.replace(match[0], componentContent);
+    } catch (error) {
+      console.error(`Не удалось найти компонент с именем ${templateName}`);
+    }
+  }
+
+  return content;
+};
+
 // Создаем новую директорию для копирования файлов
 (async () => {
   await fs.mkdir(destDir, { recursive: true });
 
   // Читаем содержимое файла template.html
-  const data = await fs.readFile(path.join(srcDir, 'template.html'), 'utf8');
+  const templatePath = path.join(srcDir, 'template.html');
+  const templateContent = await fs.readFile(templatePath, 'utf8');
 
-  // Заменяем теги шаблона на содержимое компонентов
+  // Читаем содержимое компонентов
   const componentsDir = path.join(srcDir, 'components');
-  const header = await fs.readFile(
-    path.join(componentsDir, 'header.html'),
-    'utf8',
+
+  // Заменяем шаблоны на содержимое компонентов
+  const replacedContent = await replaceTemplates(
+    templateContent,
+    componentsDir,
   );
-  const articles = await fs.readFile(
-    path.join(componentsDir, 'articles.html'),
-    'utf8',
-  );
-  const footer = await fs.readFile(
-    path.join(componentsDir, 'footer.html'),
-    'utf8',
-  );
-  const html = data
-    .replace('{{header}}', header)
-    .replace('{{articles}}', articles)
-    .replace('{{footer}}', footer);
 
   // Записываем содержимое в файл index.html
-  await fs.writeFile(path.join(destDir, 'index.html'), html);
+  await fs.writeFile(path.join(destDir, 'index.html'), replacedContent);
   console.log('index.html был успешно создан!');
 
   // Компилируем стили из папки styles в один файл
