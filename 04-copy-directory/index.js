@@ -1,55 +1,49 @@
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 
 async function copyDir() {
   const srcDir = path.resolve(__dirname, 'files');
   const destDir = path.resolve(__dirname, 'files-copy');
 
-  // Создаем новую директорию для копирования файлов
+  // Проверяем существует ли папка "files"
   try {
-    await fs.promises.access(destDir);
+    await fs.access(srcDir);
   } catch (err) {
-    await fs.promises.mkdir(destDir, { recursive: true });
+    console.error(`Папка ${srcDir} не существует`);
+    return;
   }
 
-  // Копируем файлы из исходной директории в новую директорию
-  const files = await fs.promises.readdir(srcDir);
-  for (const file of files) {
-    const srcPath = path.join(srcDir, file);
-    const destPath = path.join(destDir, file);
-
-    await fs.promises.copyFile(srcPath, destPath);
-    console.log(`Скопировано из ${srcPath} в ${destPath}`);
+  // Проверяем существует ли папка "files-copy" и создаем ее, если необходимо
+  try {
+    await fs.access(destDir);
+  } catch (err) {
+    await fs.mkdir(destDir, { recursive: true });
   }
 
-  // Отслеживаем изменения в файлах в исходной директории и обновляем их если требуется в новой директории
-  fs.watch(srcDir, { recursive: true }, async (eventType, filename) => {
-    if (filename) {
-      const srcPath = path.join(srcDir, filename);
-      const destPath = path.join(destDir, filename);
+  // Удаляем все файлы из "files-copy"
+  try {
+    const destFiles = await fs.readdir(destDir);
+    const unlinkPromises = destFiles.map((file) =>
+      fs.unlink(path.join(destDir, file)),
+    );
+    await Promise.all(unlinkPromises);
+  } catch (err) {
+    console.error('Ошибка при удалении файлов из "files-copy":', err);
+  }
 
-      if (eventType === 'rename') {
-        try {
-          await fs.promises.access(srcPath);
-          await fs.promises.copyFile(srcPath, destPath);
-          console.log(`Файл ${srcPath} скопирован в ${destPath}`);
-        } catch (err) {
-          await fs.promises.unlink(destPath);
-          console.log(`Файл ${destPath} удален`);
-        }
-      } else if (eventType === 'change') {
-        await fs.promises.copyFile(srcPath, destPath);
-        console.log(`Файл ${destPath} обновлен`);
-      } else if (eventType === 'unlink') {
-        try {
-          await fs.promises.unlink(destPath);
-          console.log(`Файл ${destPath} удален`);
-        } catch (err) {
-          console.error(`Не удалось удалить файл ${destPath}:`, err);
-        }
-      }
+  // Копируем файлы из "files" в "files-copy"
+  try {
+    const files = await fs.readdir(srcDir);
+    for (const file of files) {
+      const srcPath = path.join(srcDir, file);
+      const destPath = path.join(destDir, file);
+      await fs.copyFile(srcPath, destPath);
+      console.log(`Скопировано из ${srcPath} в ${destPath}`);
     }
-  });
+    console.log('Содержимое "files-copy" обновлено.');
+  } catch (err) {
+    console.error('Ошибка при копировании файлов:', err);
+  }
 }
 
 copyDir();
